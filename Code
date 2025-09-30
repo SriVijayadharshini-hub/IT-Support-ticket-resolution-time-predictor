@@ -1,0 +1,118 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+
+import plotly.express as px
+import plotly.graph_objects as go
+
+np.random.seed(42)
+
+n_samples = 500
+ticket_types = ['Software', 'Hardware', 'Network', 'Account', 'Other']
+priorities = ['Low', 'Medium', 'High', 'Critical']
+departments = ['IT', 'HR', 'Finance', 'Operations', 'Marketing']
+
+data = pd.DataFrame({
+    'Ticket_ID': range(1, n_samples+1),
+    'Ticket_Type': np.random.choice(ticket_types, n_samples),
+    'Priority': np.random.choice(priorities, n_samples),
+    'Department': np.random.choice(departments, n_samples),
+    'Reported_Hours': np.random.randint(0, 24, n_samples),
+    'Resolved_Hours': np.random.randint(1, 120, n_samples)
+})
+
+
+data['Resolved_Hours'] = data['Resolved_Hours'] + data['Reported_Hours']
+
+print("Dataset Shape:", data.shape)
+print(data.head())
+
+plt.figure(figsize=(8,5))
+sns.histplot(data['Resolved_Hours'], bins=30, kde=True)
+plt.title("Distribution of Resolution Time (Hours)")
+plt.show()
+
+
+le_ticket = LabelEncoder()
+data['Ticket_Type_Encoded'] = le_ticket.fit_transform(data['Ticket_Type'])
+
+le_priority = LabelEncoder()
+data['Priority_Encoded'] = le_priority.fit_transform(data['Priority'])
+
+le_department = LabelEncoder()
+data['Department_Encoded'] = le_department.fit_transform(data['Department'])
+
+
+X = data[['Ticket_Type_Encoded', 'Priority_Encoded', 'Department_Encoded', 'Reported_Hours']]
+y = data['Resolved_Hours']
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+lr_model = LinearRegression()
+lr_model.fit(X_train_scaled, y_train)
+y_pred_lr = lr_model.predict(X_test_scaled)
+
+print("Linear Regression RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_lr)))
+print("Linear Regression R2:", r2_score(y_test, y_pred_lr))
+
+
+rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+y_pred_rf = rf_model.predict(X_test)
+
+print("Random Forest RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_rf)))
+print("Random Forest R2:", r2_score(y_test, y_pred_rf))
+
+
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X[['Ticket_Type_Encoded', 'Priority_Encoded', 'Department_Encoded', 'Reported_Hours']])
+
+
+kmeans = KMeans(n_clusters=4, random_state=42)
+clusters = kmeans.fit_predict(X_pca)
+data['Cluster'] = clusters
+
+
+plt.figure(figsize=(8,6))
+sns.scatterplot(x=X_pca[:,0], y=X_pca[:,1], hue=data['Cluster'], palette='Set1')
+plt.title("Clusters of Tickets")
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.show()
+
+
+fig = px.scatter(data, x='Ticket_Type', y='Resolved_Hours', color='Cluster', 
+                 size='Reported_Hours', hover_data=['Priority', 'Department'])
+fig.update_layout(title="Ticket Resolution Time by Type and Cluster")
+fig.show()
+
+
+fig2 = px.box(data, x='Priority', y='Resolved_Hours', color='Priority', 
+              title="Resolution Time Distribution by Priority")
+fig2.show()
+
+dept_avg = data.groupby('Department')['Resolved_Hours'].mean().reset_index()
+fig3 = px.bar(dept_avg, x='Department', y='Resolved_Hours', color='Department', 
+              title="Average Resolution Time by Department")
+fig3.show()
+
+
+data['Predicted_Resolved_Hours_RF'] = rf_model.predict(X)
+data.to_csv("ticket_resolution_predictions.csv", index=False)
+
+print("Notebook execution completed. Predictions saved to CSV.")
